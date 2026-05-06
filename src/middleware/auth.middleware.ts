@@ -1,0 +1,33 @@
+
+import type { Context, Next } from "hono";
+import { HTTPException } from "hono/http-exception";
+import jwt, { type JwtPayload } from "jsonwebtoken";
+import db from "../db/index.js";
+
+
+export function authMiddleware() {
+    return async (c: Context, next: Next) => {
+        let bearerToken = c.req.header('Authorization');
+        bearerToken = bearerToken?.replace('Bearer ', '');
+
+        if (!bearerToken) {
+            throw new HTTPException(401, { message: 'Token mancante o non valido' });
+        }
+
+        try {
+            const payload = jwt.verify(bearerToken, process.env.JWT_SECRET!) as JwtPayload;
+
+            const user = await db.query.user.findFirst({
+                where: { email: payload.email }
+            });
+            if (!user) {
+                throw new Error();
+            }
+
+            c.set('authUser', user);
+            await next();
+        } catch (error) {
+            throw new HTTPException(401, { message: 'Token mancante o non valido' });
+        }
+    }
+}
