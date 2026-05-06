@@ -13,7 +13,10 @@ import { join } from "node:path"
 import { writeFile, rm, readFile } from "node:fs/promises"
 import { existsSync, mkdirSync } from "node:fs"
 import { fileTypeFromBuffer } from "file-type"
-import {  authMiddleware, } from "../middleware/auth.middleware.js"
+import {
+  authMiddleware,
+  type AuthContext,
+} from "../middleware/auth.middleware.js"
 
 const postRoute = new Hono<AuthContext>().basePath("posts")
 

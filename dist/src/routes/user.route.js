@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import db from "../db/index.js";
 import { HTTPException } from "hono/http-exception";
-import { zValidator } from '@hono/zod-validator'
+import { zValidator } from '@hono/zod-validator';
 import { createInsertSchema, createUpdateSchema } from "drizzle-orm/zod";
 import { user } from "../db/schema.js";
 import { DrizzleQueryError, eq } from "drizzle-orm";
@@ -9,40 +9,33 @@ import { DatabaseError } from "pg";
 import { querySchema, withSchema } from "../lib/validation.js";
 import z from "zod";
 import relations from "../db/relations.js";
-import { authMiddleware, type AuthContext } from "../middleware/auth.middleware.js";
+import { authMiddleware } from "../middleware/auth.middleware.js";
 import { roleMiddleware } from "../middleware/role.middleware.js";
-
-const userRoute = new Hono<AuthContext>().basePath('users');
+const userRoute = new Hono().basePath('users');
 userRoute.use(authMiddleware());
-
-const listSchema = querySchema(
-    z.object({
-        page: z.string().optional().transform(val => val ? +val : undefined),
-        perPage: z.string().optional().transform(val => val ? +val : undefined),
-        with: withSchema(relations, 'user'),
-    })
-);
+const listSchema = querySchema(z.object({
+    page: z.string().optional().transform(val => val ? +val : undefined),
+    perPage: z.string().optional().transform(val => val ? +val : undefined),
+    with: withSchema(relations, 'user'),
+}));
 userRoute.get('/', roleMiddleware('admin'), zValidator('query', listSchema), async (c) => {
     try {
         const { page, perPage, with: withQuery } = c.req.valid('query');
-
         const users = await db.query.user.findMany({
             limit: perPage || (page ? 10 : undefined),
             offset: page ? (page - 1) * (perPage || 10) : undefined,
             orderBy: { firstName: 'asc' },
             with: withQuery,
         });
-        return c.json(users)
-    } catch (error) {
+        return c.json(users);
+    }
+    catch (error) {
         return c.json({ message: 'Errore del server' }, 500);
     }
 });
-
-const findSchema = querySchema(
-    z.object({
-        with: withSchema(relations, 'user'),
-    }).strict(),
-);
+const findSchema = querySchema(z.object({
+    with: withSchema(relations, 'user'),
+}).strict());
 userRoute.get('/:id', zValidator('query', findSchema), async (c) => {
     try {
         const { id } = c.req.param();
@@ -50,7 +43,6 @@ userRoute.get('/:id', zValidator('query', findSchema), async (c) => {
         if (authUser.id !== id && authUser.role !== 'admin') {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
-
         const { with: withQuery } = c.req.valid('query');
         const user = await db.query.user.findFirst({
             where: { id },
@@ -60,30 +52,30 @@ userRoute.get('/:id', zValidator('query', findSchema), async (c) => {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
         return c.json(user);
-    } catch (error) {
+    }
+    catch (error) {
         if (error instanceof HTTPException) {
             return c.json({ message: error.message }, error.status);
         }
         // if ( error instanceof TransformError) {}
         return c.json({ message: 'Errore del server' }, 500);
     }
-})
-
+});
 userRoute.post('/', roleMiddleware('admin'), zValidator('json', createInsertSchema(user)), async (c) => {
     try {
         const data = c.req.valid('json');
         const newUser = await db.insert(user).values(data).returning();
         return c.json(newUser[0]);
-    } catch (error) {
+    }
+    catch (error) {
         if (error instanceof DrizzleQueryError) {
             if (error.cause instanceof DatabaseError) {
-                return c.json({ message: error.cause?.detail }, 400)
+                return c.json({ message: error.cause?.detail }, 400);
             }
         }
         return c.json({ message: 'Errore del server' }, 500);
     }
 });
-
 userRoute.patch('/:id', zValidator('json', createUpdateSchema(user)), async (c) => {
     try {
         const { id } = c.req.param();
@@ -92,21 +84,19 @@ userRoute.patch('/:id', zValidator('json', createUpdateSchema(user)), async (c) 
         if (authUser.id !== id && authUser.role !== 'admin') {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
-
         const updatedUser = await db.update(user).set(data).where(eq(user.id, id)).returning();
         if (!updatedUser.length) {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
-
         return c.json(updatedUser[0]);
-    } catch (error) {
+    }
+    catch (error) {
         if (error instanceof HTTPException) {
             return c.json({ message: error.message }, error.status);
         }
         return c.json({ message: 'Errore del server' }, 500);
     }
-})
-
+});
 userRoute.delete('/:id', async (c) => {
     try {
         const { id } = c.req.param();
@@ -114,19 +104,17 @@ userRoute.delete('/:id', async (c) => {
         if (authUser.id !== id && authUser.role !== 'admin') {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
-
         const deletedUsers = await db.delete(user).where(eq(user.id, id)).returning({ id: user.id });
         if (!deletedUsers.length) {
             throw new HTTPException(404, { message: 'Utente non trovato' });
         }
-
         return c.json(deletedUsers[0]);
-    } catch (error) {
+    }
+    catch (error) {
         if (error instanceof HTTPException) {
             return c.json({ message: error.message }, error.status);
         }
         return c.json({ message: 'Errore del server' }, 500);
     }
-})
-
-export default userRoute
+});
+export default userRoute;
